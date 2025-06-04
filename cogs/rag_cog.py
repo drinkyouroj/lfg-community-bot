@@ -1,76 +1,60 @@
+import discord
+from discord.ext import commands
+from discord import app_commands
 import os
 import logging
-import discord
-from discord import app_commands
-from discord.ext import commands
-from langchain_community.document_loaders import WebBaseLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_community.vectorstores import SupabaseVectorStore
 from langchain.chains import RetrievalQA
-from supabase import create_client, Client
-from typing import Optional, List, Dict, Any
+from langchain_community.vectorstores import FAISS 
+from langchain_core.documents import Document 
 
 logger = logging.getLogger(__name__)
 
 class RAG(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot):
         self.bot = bot
-        self.supabase = None
-        self.vector_store = None
-        self.retriever = None
         self.qa_chain = None
+        self.vector_store = None 
+        self.retriever = None
+        logger.info("RAG Cog initialized.")
 
     async def setup_hook(self):
-        """Initialize components when the cog is loaded."""
-        await self.initialize_supabase()
+        logger.info("RAG.setup_hook() called.")
         await self.initialize_rag()
-
-    async def initialize_supabase(self):
-        try:
-            from supabase import create_client
-            url = os.getenv('SUPABASE_URL')
-            key = os.getenv('SUPABASE_KEY')
-            if not url or not key:
-                raise ValueError("Supabase URL and key must be provided in .env")
-            if url.startswith('postgresql://'):
-                import re
-                match = re.search(r'@([^:]+):', url)
-                if match:
-                    domain = match.group(1)
-                    url = f"https://{domain}"
-            self.supabase = create_client(url, key)
-            logger.info(f"Initialized Supabase client with URL: {url}")
-        except Exception as e:
-            logger.error(f"Error initializing Supabase: {e}")
-            raise
+        logger.info("RAG.setup_hook() completed.")
 
     async def initialize_rag(self):
         try:
-            if not self.supabase:
-                raise ValueError("Supabase client not initialized")
-            embeddings = OpenAIEmbeddings()
-            table_name = os.getenv('SUPABASE_TABLE', 'documents')
-            self.vector_store = SupabaseVectorStore(
-                embedding=embeddings,
-                client=self.supabase,
-                table_name=table_name,
-                query_name=f"match_documents"
-            )
+            openai_api_key = os.getenv('OPENAI_API_KEY')
+            if not openai_api_key:
+                raise ValueError("OPENAI_API_KEY not found in .env")
+            
+            embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+            
+            texts = [
+                "LFG offers services in web development.",
+                "LFG provides solutions for cloud computing.",
+                "LFG specializes in AI and Machine Learning applications.",
+                "Contact LFG for a consultation on your next project."
+            ]
+            documents = [Document(page_content=t, metadata={"source": f"dummy_doc_{i}"}) for i, t in enumerate(texts)]
+
+            self.vector_store = FAISS.from_documents(documents=documents, embedding=embeddings)
+            
             self.retriever = self.vector_store.as_retriever(
                 search_type="similarity",
-                search_kwargs={"k": 3}
+                search_kwargs={"k": 2} 
             )
-            llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0.3)
+            llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0.3, openai_api_key=openai_api_key)
             self.qa_chain = RetrievalQA.from_chain_type(
                 llm=llm,
                 chain_type="stuff",
                 retriever=self.retriever,
                 return_source_documents=True
             )
-            logger.info("RAG system initialized successfully with Supabase")
+            logger.info("RAG system initialized successfully with FAISS")
         except Exception as e:
-            logger.error(f"Error initializing RAG system: {e}")
+            logger.error(f"Error initializing RAG system: {e}", exc_info=True) 
             raise
 
     @app_commands.command(name="ask", description="Ask a question about LFG services")
@@ -82,42 +66,46 @@ class RAG(commands.Cog):
             return
 
         await interaction.response.defer(thinking=True)
-
         try:
-            # Get response from QA chain
-            result = self.qa_chain({"query": question})
+            result = self.qa_chain.invoke({"query": question}) 
             
-            # Format the response
             response = f"**Q:** {question}\n\n**A:** {result['result']}"
-            
-            # Add sources if available
             if 'source_documents' in result and result['source_documents']:
-                sources = set(doc.metadata.get('source', 'Unknown') for doc in result['source_documents'])
-                sources_text = "\n\n*Sources:*\n" + "\n".join(f"- {src}" for src in sources)
-                response += sources_text
+                sources = set()
+                for doc in result['source_documents']:
+                    if hasattr(doc, 'metadata') and doc.metadata and 'source' in doc.metadata:
+                        sources.add(doc.metadata['source'])
+                    else:
+                        sources.add('Unknown source') 
+                
+                if sources:
+                    sources_text = "\n\n*Sources:*\n" + "\n".join(f"- {src}" for src in sources)
+                    response += sources_text
             
-            # Send the response (Discord has a 2000 character limit per message)
-            await interaction.followup.send(response[:2000])
-            
+            await interaction.followup.send(response[:2000]) 
         except Exception as e:
             logger.error(f"Error processing question: {e}", exc_info=True)
             await interaction.followup.send("Sorry, I encountered an error while processing your question. Please try again later.", ephemeral=True)
 
-    @app_commands.command(name="refresh", description="Refresh the knowledge base (Admin only)")
-    @app_commands.checks.has_permissions(administrator=True)
-    async def refresh_knowledge(self, interaction: discord.Interaction):
-        """Refresh the knowledge base (Admin only)."""
-        await interaction.response.defer(ephemeral=True)
+    @app_commands.command(name="refresh_rag", description="Re-initializes the RAG system.")
+    async def refresh_rag(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
         try:
-            await interaction.followup.send("Refreshing knowledge base. This may take a moment...", ephemeral=True)
-            await self.initialize_rag()
-            await interaction.followup.send("Knowledge base refreshed successfully!", ephemeral=True)
+            logger.info("RAG refresh command invoked. Re-initializing RAG system...")
+            await self.initialize_rag() 
+            await interaction.followup.send("RAG system has been refreshed successfully with FAISS.", ephemeral=True)
+            logger.info("RAG system refreshed successfully with FAISS.")
         except Exception as e:
-            logger.error(f"Error refreshing knowledge base: {e}", exc_info=True)
-            await interaction.followup.send("Failed to refresh knowledge base. Check logs for details.", ephemeral=True)
+            logger.error(f"Error during RAG refresh: {e}", exc_info=True)
+            await interaction.followup.send(f"An error occurred during RAG refresh: {e}", ephemeral=True)
 
 async def setup(bot):
     cog = RAG(bot)
     await bot.add_cog(cog)
-    # The commands will be automatically registered by discord.py
-    logger.info("RAG cog loaded")
+    logger.info("RAG cog added to bot. Attempting to call cog.setup_hook() explicitly.")
+    try:
+        await cog.setup_hook() 
+        logger.info("RAG cog loaded and cog.setup_hook() explicitly completed.")
+    except Exception as e:
+        logger.error(f"Error during RAG cog setup_hook: {e}", exc_info=True)
+        raise
