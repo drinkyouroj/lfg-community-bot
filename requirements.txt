@@ -1,13 +1,11 @@
 discord.py==2.3.2
 python-dotenv==1.0.0
 langchain==0.1.16
-langchain-openai==0.1.10
-langchain-text-splitters==0.2.1
-langchain-community==0.2.4
+langchain-openai==0.0.5
+langchain-community==0.0.32
 openai>=1.6.1,<2.0.0
 beautifulsoup4==4.12.2
 requests==2.31.0
 python-dateutil==2.8.2
-faiss-cpu==1.8.0
-supabase==2.5.0
+faiss-cpu>=1.7.4,<2.0.0
 postgrest==0.10.3
