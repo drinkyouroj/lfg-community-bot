@@ -39,6 +39,9 @@ class LFGBot(commands.Bot):
             except Exception as e:
                 logger.error(f'Failed to load extension {extension}: {e}', exc_info=True)
                 raise
+        # Sync commands after loading all extensions
+        await self.tree.sync()
+        logger.info('Command tree synced')
 
     async def on_ready(self):
         logger.info(f'Logged in as {self.user} (ID: {self.user.id})')
@@ -48,12 +51,6 @@ class LFGBot(commands.Bot):
                 name='your questions | !help'
             )
         )
-        # Sync commands
-        try:
-            synced = await self.tree.sync()
-            logger.info(f'Synced {len(synced)} command(s)')
-        except Exception as e:
-            logger.error(f'Failed to sync commands: {e}', exc_info=True)
 
 # Create and run the bot
 if __name__ == '__main__':

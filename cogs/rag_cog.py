@@ -29,55 +29,38 @@ class RAG(commands.Cog):
     async def initialize_supabase(self):
         try:
             from supabase import create_client
-
             url = os.getenv('SUPABASE_URL')
             key = os.getenv('SUPABASE_KEY')
             if not url or not key:
                 raise ValueError("Supabase URL and key must be provided in .env")
-            
-            # Clean up the URL if it's a PostgreSQL connection string
             if url.startswith('postgresql://'):
                 import re
                 match = re.search(r'@([^:]+):', url)
                 if match:
                     domain = match.group(1)
                     url = f"https://{domain}"
-
-            # Initialize the client with minimal configuration
             self.supabase = create_client(url, key)
-            
             logger.info(f"Initialized Supabase client with URL: {url}")
         except Exception as e:
             logger.error(f"Error initializing Supabase: {e}")
             raise
 
     async def initialize_rag(self):
-        """Initialize the RAG components with Supabase."""
         try:
             if not self.supabase:
                 raise ValueError("Supabase client not initialized")
-
-            # Initialize embeddings
             embeddings = OpenAIEmbeddings()
-            
-            # Create Supabase vector store
             table_name = os.getenv('SUPABASE_TABLE', 'documents')
-            
-            # Initialize the vector store with Supabase
             self.vector_store = SupabaseVectorStore(
                 embedding=embeddings,
                 client=self.supabase,
                 table_name=table_name,
                 query_name=f"match_documents"
             )
-            
-            # Create retriever
             self.retriever = self.vector_store.as_retriever(
                 search_type="similarity",
                 search_kwargs={"k": 3}
             )
-            
-            # Set up QA chain
             llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0.3)
             self.qa_chain = RetrievalQA.from_chain_type(
                 llm=llm,
@@ -86,7 +69,6 @@ class RAG(commands.Cog):
                 return_source_documents=True
             )
             logger.info("RAG system initialized successfully with Supabase")
-            
         except Exception as e:
             logger.error(f"Error initializing RAG system: {e}")
             raise
@@ -128,7 +110,7 @@ class RAG(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         try:
             await interaction.followup.send("Refreshing knowledge base. This may take a moment...", ephemeral=True)
-            self.initialize_rag()
+            await self.initialize_rag()
             await interaction.followup.send("Knowledge base refreshed successfully!", ephemeral=True)
         except Exception as e:
             logger.error(f"Error refreshing knowledge base: {e}", exc_info=True)
@@ -136,5 +118,6 @@ class RAG(commands.Cog):
 
 async def setup(bot):
     cog = RAG(bot)
-    await cog.setup_hook()
     await bot.add_cog(cog)
+    # The commands will be automatically registered by discord.py
+    logger.info("RAG cog loaded")
