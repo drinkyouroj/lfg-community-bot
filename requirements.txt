@@ -8,7 +8,7 @@ beautifulsoup4==4.12.2
 requests==2.31.0
 python-dateutil==2.8.2
 supabase==2.3.4
-gotrue==1.2.2
+gotrue==2.12.0
 postgrest==1.0.0
 realtime==1.0.1
 supafunc==0.3.0
