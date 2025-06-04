@@ -1,15 +1,10 @@
 discord.py==2.3.2
 python-dotenv==1.0.0
-langchain==0.0.267
-langchain-openai==0.0.2
+langchain==0.1.16
+langchain-openai==0.1.3
 openai>=1.6.1,<2.0.0
 beautifulsoup4==4.12.2
 requests==2.31.0
 python-dateutil==2.8.2
-
-# Supabase stack - using versions that work well together
-supabase==2.3.4
-gotrue==2.9.1  # Downgraded to be compatible with supabase 2.3.4
-
-# Other dependencies
-realtime==1.0.1
+supabase==1.0.0
+postgrest==0.10.3

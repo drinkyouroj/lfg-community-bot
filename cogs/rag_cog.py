@@ -14,39 +14,44 @@ from typing import Optional, List, Dict, Any
 logger = logging.getLogger(__name__)
 
 class RAG(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.supabase = None
         self.vector_store = None
         self.retriever = None
         self.qa_chain = None
-        self.supabase: Optional[Client] = None
-        self.initialize_supabase()
-        self.initialize_rag()
 
-    def initialize_supabase(self):
-        """Initialize Supabase client."""
+    async def setup_hook(self):
+        """Initialize components when the cog is loaded."""
+        await self.initialize_supabase()
+        await self.initialize_rag()
+
+    async def initialize_supabase(self):
         try:
+            from supabase import create_client
+
             url = os.getenv('SUPABASE_URL')
             key = os.getenv('SUPABASE_KEY')
             if not url or not key:
                 raise ValueError("Supabase URL and key must be provided in .env")
             
-            # Clean up the URL in case it contains the PostgreSQL connection string
+            # Clean up the URL if it's a PostgreSQL connection string
             if url.startswith('postgresql://'):
-                # Extract the domain from the PostgreSQL connection string
                 import re
                 match = re.search(r'@([^:]+):', url)
                 if match:
                     domain = match.group(1)
                     url = f"https://{domain}"
-            
+
+            # Initialize the client with minimal configuration
             self.supabase = create_client(url, key)
+            
             logger.info(f"Initialized Supabase client with URL: {url}")
         except Exception as e:
             logger.error(f"Error initializing Supabase: {e}")
             raise
 
-    def initialize_rag(self):
+    async def initialize_rag(self):
         """Initialize the RAG components with Supabase."""
         try:
             if not self.supabase:
@@ -130,4 +135,6 @@ class RAG(commands.Cog):
             await interaction.followup.send("Failed to refresh knowledge base. Check logs for details.", ephemeral=True)
 
 async def setup(bot):
-    await bot.add_cog(RAG(bot))
+    cog = RAG(bot)
+    await cog.setup_hook()
+    await bot.add_cog(cog)
