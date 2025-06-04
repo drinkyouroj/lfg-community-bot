@@ -24,7 +24,7 @@ class LFGBot(commands.Bot):
         super().__init__(
             command_prefix='!',
             intents=intents,
-            help_command=None
+            help_command=commands.DefaultHelpCommand()  # Enable default help command
         )
         self.initial_extensions = [
             'cogs.rag_cog'
@@ -35,9 +35,10 @@ class LFGBot(commands.Bot):
         for extension in self.initial_extensions:
             try:
                 await self.load_extension(extension)
-                logger.info(f'Loaded extension: {extension}')
+                logger.info(f'Successfully loaded extension: {extension}')
             except Exception as e:
-                logger.error(f'Failed to load extension {extension}: {e}')
+                logger.error(f'Failed to load extension {extension}: {e}', exc_info=True)
+                raise
 
     async def on_ready(self):
         logger.info(f'Logged in as {self.user} (ID: {self.user.id})')
@@ -47,6 +48,12 @@ class LFGBot(commands.Bot):
                 name='your questions | !help'
             )
         )
+        # Sync commands
+        try:
+            synced = await self.tree.sync()
+            logger.info(f'Synced {len(synced)} command(s)')
+        except Exception as e:
+            logger.error(f'Failed to sync commands: {e}', exc_info=True)
 
 # Create and run the bot
 if __name__ == '__main__':
