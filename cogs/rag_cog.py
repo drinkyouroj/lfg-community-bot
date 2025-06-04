@@ -28,10 +28,21 @@ class RAG(commands.Cog):
         try:
             url = os.getenv('SUPABASE_URL')
             key = os.getenv('SUPABASE_KEY')
+            
             if not url or not key:
                 raise ValueError("Supabase URL and key must be provided in .env")
+                
+            # Ensure the URL is in the correct format
+            if not url.startswith(('http://', 'https://')):
+                url = f'https://{url}'
+                
+            # Remove any trailing slashes
+            url = url.rstrip('/')
+            
+            logger.info(f"Initializing Supabase client with URL: {url}")
             self.supabase = create_client(url, key)
             logger.info("Supabase client initialized successfully")
+            
         except Exception as e:
             logger.error(f"Error initializing Supabase: {e}")
             raise
